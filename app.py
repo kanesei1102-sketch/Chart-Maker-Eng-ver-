@@ -1,0 +1,258 @@
+import streamlit as st
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches # For legend
+import io
+import numpy as np
+
+# ---------------------------------------------------------
+# Settings
+# ---------------------------------------------------------
+st.set_page_config(page_title="Bar Plot Maker (With Legend)", layout="wide")
+st.title("📊 Bar Plot Maker (With Legend)")
+st.markdown("""
+**Update:** A group legend is now displayed on the right side of the graph.
+""")
+
+# Session Settings
+if 'cond_count' not in st.session_state:
+    st.session_state.cond_count = 3
+
+def add_condition():
+    st.session_state.cond_count += 1
+
+def remove_condition():
+    if st.session_state.cond_count > 1:
+        st.session_state.cond_count -= 1
+
+# Sidebar Settings
+with st.sidebar:
+    st.header("Data Settings")
+    st.button("＋ Add Condition", on_click=add_condition)
+    if st.session_state.cond_count > 1:
+        st.button("－ Remove Condition", on_click=remove_condition)
+    
+    st.divider()
+    st.subheader("Group Settings")
+    group1_name = st.text_input("Group 1 (e.g., Control)", value="Control")
+    group2_name = st.text_input("Group 2 (e.g., A)", value="A")
+    
+    st.divider()
+    st.header("Axis Settings")
+    y_axis_label = st.text_input("Y-axis Title", value="Number of cells")
+    
+    st.divider()
+    st.header("Design Settings")
+    st.subheader("Color Settings")
+    color1 = st.color_picker("Group 1 Color", "#999999") # Academic gray
+    color2 = st.color_picker("Group 2 Color", "#66c2a5") # Emerald green
+    
+    st.subheader("Shape & Layout")
+    bar_width = st.slider("Bar Width", min_value=0.2, max_value=1.0, value=0.6, step=0.1)
+    bar_gap = st.slider("Gap Between Bars", min_value=0.0, max_value=0.5, value=0.05, step=0.01)
+    cap_size = st.slider("Error Bar Capsize", min_value=0.0, max_value=10.0, value=5.0, step=1.0)
+    dot_size = st.slider("Plot Dot Size", 10, 100, 40)
+    
+    # ★ Added: Toggle Legend Display
+    show_legend = st.checkbox("Show Legend", value=True)
+
+# ---------------------------------------------------------
+# Data Input Processing
+# ---------------------------------------------------------
+cond_data_list = [] 
+
+for i in range(st.session_state.cond_count):
+    with st.container():
+        st.markdown("---")
+        def_name = ["DMSO", "X", "Y", "Z"][i] if i < 4 else f"Cond_{i+1}"
+        
+        c_meta, c_g1, c_g2 = st.columns([1.5, 2, 2])
+        
+        with c_meta:
+            st.markdown(f"#### Condition {i+1}")
+            cond_name = st.text_input("Condition Name", value=def_name, key=f"name_{i}")
+            sig_label = st.text_input("Significance Label", placeholder="e.g. ****", key=f"sig_{i}")
+        
+        with c_g1:
+            st.write(f"▼ **{group1_name}**")
+            def_val1 = "420\n430\n410\n440" if i == 0 else ""
+            input1 = st.text_area(f"Data 1", value=def_val1, height=100, key=f"d1_{i}", label_visibility="collapsed")
+
+        with c_g2:
+            st.write(f"▼ **{group2_name}**")
+            def_val2 = "180\n190\n185\n175" if i == 0 else ""
+            input2 = st.text_area(f"Data 2", value=def_val2, height=100, key=f"d2_{i}", label_visibility="collapsed")
+
+        vals1 = []
+        vals2 = []
+        if input1:
+            try:
+                vals1 = [float(x.strip()) for x in input1.strip().split('\n') if x.strip()]
+            except: pass
+        if input2:
+            try:
+                vals2 = [float(x.strip()) for x in input2.strip().split('\n') if x.strip()]
+            except: pass
+        
+        if vals1 or vals2:
+            cond_data_list.append({
+                'name': cond_name,
+                'g1': vals1,
+                'g2': vals2,
+                'sig': sig_label
+            })
+
+# ---------------------------------------------------------
+# Graph Drawing
+# ---------------------------------------------------------
+if cond_data_list:
+    st.subheader("Preview")
+    
+    try:
+        all_vals = []
+        has_any_g1 = False
+        has_any_g2 = False
+        
+        for item in cond_data_list:
+            if item['g1']: has_any_g1 = True
+            if item['g2']: has_any_g2 = True
+            all_vals.extend(item['g1'])
+            all_vals.extend(item['g2'])
+        
+        if not all_vals:
+            st.warning("No valid numeric data available")
+            st.stop()
+            
+        global_max = max(all_vals)
+        y_limit = global_max * 1.35
+        
+        n_plots = len(cond_data_list)
+        # bbox_inches='tight' handles autosizing, so current figsize is fine
+        fig, axes = plt.subplots(1, n_plots, figsize=(n_plots * 3, 5), sharey=True)
+        
+        if n_plots == 1:
+            axes = [axes]
+            
+        plt.subplots_adjust(wspace=0)
+        plt.rcParams['font.family'] = 'sans-serif'
+
+        # --- Draw per condition ---
+        for i, ax in enumerate(axes):
+            data = cond_data_list[i]
+            g1 = np.array(data['g1'])
+            g2 = np.array(data['g2'])
+            
+            has_g1 = len(g1) > 0
+            has_g2 = len(g2) > 0
+            
+            # Determine positions
+            if has_g1 and has_g2:
+                pos1 = -(bar_width/2 + bar_gap/2)
+                pos2 = +(bar_width/2 + bar_gap/2)
+            else:
+                pos1 = 0
+                pos2 = 0
+
+            # Group 1
+            if has_g1:
+                mean1 = np.mean(g1)
+                std1 = np.std(g1, ddof=1) if len(g1) > 1 else 0
+                ax.bar(pos1, mean1, width=bar_width, color=color1, edgecolor='black', zorder=1)
+                ax.errorbar(pos1, mean1, yerr=std1, fmt='none', color='black', capsize=cap_size, elinewidth=1.5, zorder=2)
+                noise = np.random.normal(0, 0.04 * bar_width, len(g1))
+                ax.scatter(pos1 + noise, g1, color='white', edgecolor='gray', s=dot_size, zorder=3)
+            
+            # Group 2
+            if has_g2:
+                mean2 = np.mean(g2)
+                std2 = np.std(g2, ddof=1) if len(g2) > 1 else 0
+                ax.bar(pos2, mean2, width=bar_width, color=color2, edgecolor='black', zorder=1)
+                ax.errorbar(pos2, mean2, yerr=std2, fmt='none', color='black', capsize=cap_size, elinewidth=1.5, zorder=2)
+                noise = np.random.normal(0, 0.04 * bar_width, len(g2))
+                ax.scatter(pos2 + noise, g2, color='white', edgecolor='gray', s=dot_size, zorder=3)
+
+            # X-axis Labels
+            ticks = []
+            labels = []
+            if has_g1:
+                ticks.append(pos1)
+                labels.append(group1_name)
+            if has_g2:
+                ticks.append(pos2)
+                labels.append(group2_name)
+            
+            ax.set_xticks(ticks)
+            ax.set_xticklabels(labels, fontsize=11)
+            ax.set_title(data['name'], fontsize=12, pad=10)
+            
+            # Significance Line
+            sig_text = data['sig']
+            if sig_text:
+                current_max = 0
+                if has_g1: current_max = max(current_max, np.max(g1))
+                if has_g2: current_max = max(current_max, np.max(g2))
+                
+                y_line = current_max * 1.15
+                h = current_max * 0.03
+                
+                if has_g1 and has_g2:
+                    lx_start, lx_end = pos1, pos2
+                elif has_g1:
+                    lx_start, lx_end = pos1 - bar_width/3, pos1 + bar_width/3
+                else: 
+                    lx_start, lx_end = pos2 - bar_width/3, pos2 + bar_width/3
+                
+                ax.plot([lx_start, lx_start, lx_end, lx_end], [y_line-h, y_line, y_line, y_line-h], lw=1.5, c='k')
+                ax.text((lx_start+lx_end)/2, y_line + current_max*0.02, sig_text, ha='center', va='bottom', fontsize=14, color='k')
+
+            # Spine Settings
+            ax.set_ylim(0, y_limit)
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['bottom'].set_visible(True)
+            ax.spines['bottom'].set_color('black')
+            ax.spines['bottom'].set_linewidth(1.2)
+            
+            if i == 0:
+                ax.spines['left'].set_visible(True)
+                ax.spines['left'].set_color('black')
+                ax.spines['left'].set_linewidth(1.2)
+                ax.set_ylabel(y_axis_label, fontsize=14) 
+                ax.tick_params(axis='y', left=True, labelleft=True, width=1.2)
+            else:
+                ax.spines['left'].set_visible(False)
+                ax.tick_params(axis='y', left=False, labelleft=False)
+
+            margin = 0.5
+            max_pos = (bar_width/2 + bar_gap/2) + bar_width/2
+            ax.set_xlim(-(max_pos + margin), (max_pos + margin))
+
+        # --- ★ Added Point: Create Legend ---
+        if show_legend:
+            legend_handles = []
+            # Add to legend if Group 1 exists
+            if has_any_g1:
+                patch1 = mpatches.Patch(facecolor=color1, edgecolor='black', label=group1_name)
+                legend_handles.append(patch1)
+            # Add to legend if Group 2 exists
+            if has_any_g2:
+                patch2 = mpatches.Patch(facecolor=color2, edgecolor='black', label=group2_name)
+                legend_handles.append(patch2)
+            
+            # Add legend to the entire figure (positioned outside right)
+            # bbox_to_anchor=(1.05, 0.5) specifies "outside right center"
+            if legend_handles:
+                fig.legend(handles=legend_handles, loc='center left', bbox_to_anchor=(0.92, 0.5), 
+                           frameon=False, fontsize=12)
+
+        st.pyplot(fig)
+
+        img = io.BytesIO()
+        # bbox_inches='tight' is important, ensuring the legend outside is included in the saved image
+        fig.savefig(img, format='png', bbox_inches='tight')
+        st.download_button("Download Image", data=img, file_name="final_plot_with_legend.png", mime="image/png")
+
+    except Exception as e:
+        st.error(f"Plotting Error: {e}")
+else:
+    st.info("Please enter data")
