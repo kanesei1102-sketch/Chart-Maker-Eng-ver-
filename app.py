@@ -74,6 +74,14 @@ with st.sidebar:
         dot_size = st.slider("Dot Size", 1, 200, 20) 
         dot_alpha = st.slider("Dot Alpha", 0.1, 1.0, 0.6, 0.1)
         jitter_strength = st.slider("Jitter Strength", 0.0, 0.5, 0.04, 0.01)
+    with st.sidebar:
+        st.divider()
+        st.caption("【Disclaimer】")
+        st.caption("""
+        This tool is for data visualization purposes. 
+        Significance labels and graph outputs are generated based on your input. 
+        Final scientific validation must be conducted by the user based on professional expertise.
+        """)
 
 # ---------------------------------------------------------
 # 3. Data Processing Pipeline (Hybrid)
