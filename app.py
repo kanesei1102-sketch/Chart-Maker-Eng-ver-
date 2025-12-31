@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches # For legend
 import io
 import numpy as np
+import datetime
 
 # ---------------------------------------------------------
 # Settings
@@ -248,9 +249,13 @@ if cond_data_list:
         st.pyplot(fig)
 
         img = io.BytesIO()
-        # bbox_inches='tight' is important, ensuring the legend outside is included in the saved image
-        fig.savefig(img, format='png', bbox_inches='tight')
-        st.download_button("Download Image", data=img, file_name="final_plot_with_legend.png", mime="image/png")
+        fig.savefig(img, format='png', bbox_inches='tight', dpi=300) # 画質も良くしておきました
+        
+        # ★ここを追加: 日本時間(JST)のファイル名を生成
+        now = datetime.datetime.now() + datetime.timedelta(hours=9)
+        file_name = f"graph_{now.strftime('%Y%m%d_%H%M%S')}.png"
+        
+        st.download_button("Download Image", data=img, file_name=file_name, mime="image/png")
 
     except Exception as e:
         st.error(f"Plotting Error: {e}")
