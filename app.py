@@ -9,231 +9,195 @@ import datetime
 # ---------------------------------------------------------
 # Page Configuration
 # ---------------------------------------------------------
-st.set_page_config(page_title="Sci-Graph Maker Pro", layout="wide")
-st.title("📊 Sci-Graph Maker Pro (Multi-Type Edition)")
+st.set_page_config(page_title="Sci-Graph Maker Pro Max", layout="wide")
+st.title("📊 Sci-Graph Maker: Professional Workflow")
 st.markdown("""
-**Description:** Generate publication-ready figures with high scientific integrity.  
-**Features:** Switch between Bar (Mean), Box (Median), and Violin (Distribution) plots with a single click.
+**Hybrid Architecture:** Seamlessly integrate data from the Image Quantifier CSV while adding manual control groups as needed.  
+**Scientific Standards:** High-precision visualization supporting Bar, Box, and Violin plots with SD/SEM options.
 """)
 
-# Session State for dynamic conditions
+# Session State Management
 if 'cond_count' not in st.session_state:
-    st.session_state.cond_count = 3
+    st.session_state.cond_count = 0 
 
 def add_condition():
     st.session_state.cond_count += 1
 
 def remove_condition():
-    if st.session_state.cond_count > 1:
+    if st.session_state.cond_count > 0:
         st.session_state.cond_count -= 1
 
 # ---------------------------------------------------------
 # Sidebar Configuration
 # ---------------------------------------------------------
 with st.sidebar:
-    st.header("Data Settings")
-    st.button("＋ Add Condition", on_click=add_condition)
-    if st.session_state.cond_count > 1:
-        st.button("－ Remove Condition", on_click=remove_condition)
+    st.header("1. Global Configuration")
+    graph_type = st.selectbox("Plot Type", ["Bar Plot (Mean)", "Box Plot (Median)", "Violin Plot (Density)"])
     
+    if "Bar" in graph_type:
+        error_bar_type = st.radio("Error Bar Type:", ["SD (Standard Deviation)", "SEM (Standard Error)"])
+    
+    fig_title = st.text_input("Figure Title", value="Experimental Analysis")
+    y_axis_label = st.text_input("Y-axis Label", value="Quantified Value")
+    manual_y_max = st.number_input("Fixed Y-axis Max (0 for Auto)", value=0.0)
+
     st.divider()
-    st.subheader("Group Labels")
-    group1_name = st.text_input("Group 1 Name", value="Control")
-    group2_name = st.text_input("Group 2 Name", value="Target")
+    st.header("2. Aesthetics & Legend")
     
-    st.divider()
-    st.header("Graph Configuration")
-    
-    # Switch between graph types (Default: Bar Plot)
-    graph_type = st.selectbox("Select Graph Type", 
-                              ["Bar Plot (Mean ± SD)", 
-                               "Box Plot (Median + IQR)", 
-                               "Violin Plot (Distribution)"])
-    
-    y_axis_label = st.text_input("Y-axis Title", value="Relative Intensity (%)")
-    
-    st.divider()
-    st.header("Design & Style")
-    
-    with st.expander("🎨 Colors & Legend", expanded=True):
+    with st.expander("🎨 Group Labels & Colors", expanded=True):
+        group1_name = st.text_input("Group 1 Label", value="Control")
         color1 = st.color_picker("Group 1 Color", "#999999") 
+        
+        st.divider()
+        
+        group2_name = st.text_input("Group 2 Label", value="Target")
         color2 = st.color_picker("Group 2 Color", "#66c2a5") 
+        
+        st.divider()
         show_legend = st.checkbox("Show Legend", value=True)
 
-    with st.expander("📏 Layout Adjustment", expanded=True):
-        width = st.slider("Element Width", 0.2, 1.0, 0.6, 0.1)
-        gap = st.slider("Group Gap", 0.0, 0.5, 0.05, 0.01)
-        if "Bar" in graph_type:
-            cap_size = st.slider("Error Bar Capsize", 0.0, 10.0, 5.0, 0.5)
-
-    with st.expander("✨ Individual Points (Strip Plot)", expanded=True):
-        show_points = st.checkbox("Show Data Points", value=True)
-        st.caption("For large datasets (N > 1000), reduce size and increase alpha.")
+    with st.expander("✨ Strip Plot Adjustment"):
+        show_points = st.checkbox("Show Individual Points (N)", value=True)
         dot_size = st.slider("Dot Size", 1, 100, 20) 
-        dot_alpha = st.slider("Dot Alpha (Transparency)", 0.1, 1.0, 0.6, 0.1)
-        jitter_strength = st.slider("Jitter Strength", 0.0, 0.3, 0.04, 0.01)
+        dot_alpha = st.slider("Alpha (Transparency)", 0.1, 1.0, 0.6)
+        jitter_strength = st.slider("Jitter Strength", 0.0, 0.3, 0.04)
 
 # ---------------------------------------------------------
-# Data Input Section
+# Main: Data Input Section
 # ---------------------------------------------------------
 cond_data_list = [] 
 
+# --- A. CSV Integration ---
+st.header("📂 Step 1: Import Analyzed Data")
+uploaded_csv = st.file_uploader("Upload CSV from Image Quantifier (Optional)", type="csv")
+
+if uploaded_csv:
+    ext_df = pd.read_csv(uploaded_csv)
+    for g_name in ext_df['Group'].unique():
+        g_data = ext_df[ext_df['Group'] == g_name]['Value'].tolist()
+        cond_data_list.append({
+            'name': g_name,
+            'g1': g_data, 
+            'g2': [], 
+            'sig': "",
+            'source': 'csv'
+        })
+    st.success(f"Successfully imported {len(ext_df['Group'].unique())} groups from CSV.")
+
+st.divider()
+
+# --- B. Manual Addition ---
+st.header("✍️ Step 2: Add Manual Conditions")
+col_btn1, col_btn2, _ = st.columns([1, 1, 3])
+with col_btn1:
+    st.button("＋ Add Condition", on_click=add_condition)
+with col_btn2:
+    st.button("－ Remove Condition", on_click=remove_condition)
+
 for i in range(st.session_state.cond_count):
     with st.container():
-        st.markdown("---")
-        def_name = ["Day 0", "Day 3", "Day 7", "Day 14"][i] if i < 4 else f"Cond_{i+1}"
-        
+        st.markdown(f"**Manual Condition {i+1}**")
         c_meta, c_g1, c_g2 = st.columns([1.5, 2, 2])
-        
         with c_meta:
-            st.markdown(f"#### Condition {i+1}")
-            cond_name = st.text_input("Condition Name", value=def_name, key=f"name_{i}")
-            sig_label = st.text_input("Significance Label", placeholder="e.g. **", key=f"sig_{i}")
-        
+            cond_name = st.text_input("Cond. Name", value=f"Exp_{i+1}", key=f"name_{i}")
+            sig_label = st.text_input("Significance", placeholder="e.g. **", key=f"sig_{i}")
         with c_g1:
-            st.write(f"▼ **{group1_name}**")
-            # Demo values
-            def_val1 = "100\n105\n98\n102" if i == 0 else ""
-            input1 = st.text_area(f"Data 1", value=def_val1, height=100, key=f"d1_{i}", label_visibility="collapsed")
-
+            input1 = st.text_area(f"{group1_name} Data", key=f"d1_{i}", help="Line separated values")
         with c_g2:
-            st.write(f"▼ **{group2_name}**")
-            def_val2 = "140\n135\n150\n145" if i == 0 else ""
-            input2 = st.text_area(f"Data 2", value=def_val2, height=100, key=f"d2_{i}", label_visibility="collapsed")
+            input2 = st.text_area(f"{group2_name} Data", key=f"d2_{i}", help="Optional: Comparison group")
 
         vals1, vals2 = [], []
-        if input1:
-            try: vals1 = [float(x.strip()) for x in input1.strip().split('\n') if x.strip()]
-            except: pass
-        if input2:
-            try: vals2 = [float(x.strip()) for x in input2.strip().split('\n') if x.strip()]
-            except: pass
-        
+        try:
+            if input1: vals1 = [float(x.strip()) for x in input1.strip().split('\n') if x.strip()]
+            if input2: vals2 = [float(x.strip()) for x in input2.strip().split('\n') if x.strip()]
+        except:
+            st.error(f"Invalid numeric input in Condition {i+1}.")
+            
         if vals1 or vals2:
-            cond_data_list.append({'name': cond_name, 'g1': vals1, 'g2': vals2, 'sig': sig_label})
+            cond_data_list.append({
+                'name': cond_name, 
+                'g1': vals1, 
+                'g2': vals2, 
+                'sig': sig_label,
+                'source': 'manual'
+            })
 
 # ---------------------------------------------------------
-# Plotting Logic
+# Visualization Section
 # ---------------------------------------------------------
 if cond_data_list:
-    st.subheader("Preview")
-    
+    st.divider()
+    st.subheader("📊 Final Result Preview")
     try:
-        all_vals = []
-        for item in cond_data_list:
-            all_vals.extend(item['g1'])
-            all_vals.extend(item['g2'])
-        
-        if not all_vals:
-            st.warning("No valid numeric data entered.")
-            st.stop()
-            
-        global_max = max(all_vals)
-        y_limit = global_max * 1.35
-        
         n_plots = len(cond_data_list)
-        fig, axes = plt.subplots(1, n_plots, figsize=(n_plots * 3, 5), sharey=True)
+        fig, axes = plt.subplots(1, n_plots, figsize=(max(n_plots * 3.5, 6), 5), sharey=True)
         if n_plots == 1: axes = [axes]
-            
-        plt.subplots_adjust(wspace=0)
-        plt.rcParams['font.family'] = 'sans-serif'
+        
+        plt.subplots_adjust(wspace=0.1)
+        fig.suptitle(fig_title, fontsize=16, y=1.08)
+
+        all_vals = []
+        for d in cond_data_list: all_vals.extend(d['g1'] + d['g2'])
+        y_limit = manual_y_max if manual_y_max > 0 else max(all_vals) * 1.35
 
         for i, ax in enumerate(axes):
             data = cond_data_list[i]
             g1, g2 = np.array(data['g1']), np.array(data['g2'])
-            has_g1, has_g2 = len(g1) > 0, len(g2) > 0
             
-            if has_g1 and has_g2:
-                pos1, pos2 = -(width/2 + gap/2), +(width/2 + gap/2)
-            else:
-                pos1, pos2 = 0, 0
+            w, gap_val = 0.6, 0.05
+            pos1, pos2 = (-(w/2 + gap_val/2), +(w/2 + gap_val/2)) if len(g1)>0 and len(g2)>0 else (0, 0)
 
-            # Sub-function for group plotting
-            def plot_group(ax, pos, vals, color):
+            def draw_element(ax, pos, vals, color):
                 if len(vals) == 0: return
-                
-                # A. Bar Plot (Original logic)
                 if "Bar" in graph_type:
                     mean = np.mean(vals)
-                    std = np.std(vals, ddof=1) if len(vals) > 1 else 0
-                    ax.bar(pos, mean, width=width, color=color, edgecolor='black', zorder=1, alpha=0.9)
-                    ax.errorbar(pos, mean, yerr=std, fmt='none', color='black', capsize=cap_size, elinewidth=1.5, zorder=2)
-                
-                # B. Box Plot
+                    err = np.std(vals, ddof=1)
+                    if error_bar_type == "SEM (Standard Error)":
+                        err = err / np.sqrt(len(vals))
+                    ax.bar(pos, mean, width=w, color=color, edgecolor='black', zorder=1)
+                    ax.errorbar(pos, mean, yerr=err, fmt='none', color='black', capsize=5, zorder=2)
                 elif "Box" in graph_type:
-                    ax.boxplot(vals, positions=[pos], widths=width, patch_artist=True, 
-                               showfliers=False,
-                               medianprops=dict(color="black", linewidth=1.5),
-                               boxprops=dict(facecolor=color, color="black"),
-                               whiskerprops=dict(color="black"),
-                               capprops=dict(color="black"), zorder=1)
-                
-                # C. Violin Plot
+                    ax.boxplot(vals, positions=[pos], widths=w, patch_artist=True, showfliers=False,
+                               boxprops=dict(facecolor=color), medianprops=dict(color="black"), zorder=1)
                 elif "Violin" in graph_type:
-                    parts = ax.violinplot(vals, positions=[pos], widths=width, showmeans=False, showextrema=False)
-                    for pc in parts['bodies']:
-                        pc.set_facecolor(color)
-                        pc.set_edgecolor('black')
-                        pc.set_alpha(0.8)
-                        pc.set_zorder(1)
+                    vp = ax.violinplot(vals, positions=[pos], widths=w, showextrema=False)
+                    for pc in vp['bodies']: pc.set_facecolor(color); pc.set_alpha(0.7); pc.set_zorder(1)
 
-                # Individual Points (Strip Plot) - Overlay for all types
                 if show_points:
-                    noise = np.random.normal(0, jitter_strength * width, len(vals))
-                    edge_c = 'gray' if dot_size > 10 else 'none'
-                    ax.scatter(pos + noise, vals, color='white', edgecolor=edge_c, 
-                               s=dot_size, alpha=dot_alpha, zorder=3)
+                    noise = np.random.normal(0, jitter_strength * w, len(vals))
+                    ax.scatter(pos + noise, vals, color='white', edgecolor='gray', s=dot_size, alpha=dot_alpha, zorder=3)
 
-            plot_group(ax, pos1, g1, color1)
-            plot_group(ax, pos2, g2, color2)
+            draw_element(ax, pos1, g1, color1)
+            draw_element(ax, pos2, g2, color2)
 
-            # X-axis setup
-            ticks, labels = [], []
-            if has_g1: ticks.append(pos1); labels.append(group1_name)
-            if has_g2: ticks.append(pos2); labels.append(group2_name)
-            ax.set_xticks(ticks)
-            ax.set_xticklabels(labels, fontsize=11)
-            ax.set_title(data['name'], fontsize=12, pad=10)
+            if len(g1)>0 and len(g2)>0:
+                ax.set_xticks([pos1, pos2])
+                ax.set_xticklabels([group1_name, group2_name], fontsize=9)
+            else:
+                ax.set_xticks([0])
+                ax.set_xticklabels([""], fontsize=9)
             
-            # Significance indicators
-            sig_text = data['sig']
-            if sig_text:
-                current_max = 0
-                if has_g1: current_max = max(current_max, np.max(g1))
-                if has_g2: current_max = max(current_max, np.max(g2))
-                y_line = current_max * 1.15
-                h = current_max * 0.03
-                lx_start, lx_end = (pos1, pos2) if has_g1 and has_g2 else (pos1-0.1, pos1+0.1)
-                ax.plot([lx_start, lx_start, lx_end, lx_end], [y_line-h, y_line, y_line, y_line-h], lw=1.5, c='k')
-                ax.text((lx_start+lx_end)/2, y_line + current_max*0.02, sig_text, ha='center', va='bottom', fontsize=14, color='k')
-
-            # Spines and Decoration
+            ax.set_title(data['name'], fontsize=11, pad=10)
             ax.set_ylim(0, y_limit)
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
-            if i == 0:
-                ax.set_ylabel(y_axis_label, fontsize=14)
-            else:
-                ax.spines['left'].set_visible(False)
-                ax.tick_params(axis='y', left=False, labelleft=False)
+            if i == 0: ax.set_ylabel(y_axis_label, fontsize=12)
+            else: ax.spines['left'].set_visible(False); ax.tick_params(axis='y', left=False)
 
-        # Legend
         if show_legend:
-            handles = [mpatches.Patch(facecolor=color1, edgecolor='black', label=group1_name),
-                       mpatches.Patch(facecolor=color2, edgecolor='black', label=group2_name)]
-            fig.legend(handles=handles, loc='center left', bbox_to_anchor=(0.92, 0.5), frameon=False, fontsize=12)
+            handles = [mpatches.Patch(facecolor=color1, label=group1_name), 
+                       mpatches.Patch(facecolor=color2, label=group2_name)]
+            fig.legend(handles=handles, loc='center left', bbox_to_anchor=(0.98, 0.5), frameon=False)
 
         st.pyplot(fig)
-
-        # Download with JST Timestamp
-        img = io.BytesIO()
-        fig.savefig(img, format='png', bbox_inches='tight', dpi=300) 
+        
+        buf = io.BytesIO()
+        fig.savefig(buf, format='png', bbox_inches='tight', dpi=300)
+        # JST Timestamp for the filename
         now = datetime.datetime.now() + datetime.timedelta(hours=9)
-        st.download_button("Download Image", data=img, 
-                           file_name=f"graph_{now.strftime('%Y%m%d_%H%M%S')}.png", 
-                           mime="image/png")
+        st.download_button("📥 Download Figure", buf, f"publication_graph_{now.strftime('%Y%m%d_%H%M%S')}.png")
 
     except Exception as e:
-        st.error(f"An error occurred: {e}")
+        st.error(f"Plotting Error: {e}")
 else:
-    st.info("Please enter data to generate the preview.")
+    st.info("Awaiting input: Upload a CSV or add a manual condition.")
