@@ -137,7 +137,7 @@ if cond_data_list:
         fig, axes = plt.subplots(1, n_plots, figsize=(n_plots * 3.5, fig_height), sharey=True)
         if n_plots == 1: axes = [axes]
         
-        plt.subplots_adjust(wspace=wspace_val)
+        plt.subplots_adjust(wspace=0)
         plt.rcParams['font.family'] = 'sans-serif'
         fig.suptitle(fig_title, fontsize=16, y=1.05)
 
@@ -217,16 +217,21 @@ if cond_data_list:
             # Spines & Border Styling (The "Perfect" Look)
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
-            ax.spines['bottom'].set_linewidth(1.2)
+            ax.spines['bottom'].set_linewidth(1.5)
+            ax.spines['bottom'].set_visible(True)  # 必ず表示
+            ax.spines['bottom'].set_color('black') # 色を黒に固定
             if i == 0:
                 ax.set_ylabel(y_axis_label, fontsize=14)
                 ax.spines['left'].set_linewidth(1.2)
             else:
                 ax.spines['left'].set_visible(False)
                 ax.tick_params(axis='y', left=False)
+            if i > 0:
+                ax.spines['left'].set_visible(False)
+                ax.tick_params(axis='y', left=False)
 
             # Dynamic Camera Limit to prevent element clipping
-            view_margin = 0.8
+            view_margin = 0.5
             edge_coord = (bar_width/2 + bar_gap/2) + bar_width/2
             ax.set_xlim(-(edge_coord + view_margin), (edge_coord + view_margin))
 
